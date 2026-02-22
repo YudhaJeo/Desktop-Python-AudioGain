@@ -1,6 +1,7 @@
+# build_exe.py
 """
-build_exe.py — Generate mic_booster_pro.exe
-============================================
+build_exe.py — Generate MicBoostPro.exe
+========================================
 Requirements:
     pip install pyinstaller sounddevice numpy pystray pillow
 
@@ -8,11 +9,14 @@ Usage:
     python build_exe.py
 
 Output:
-    dist/MicBoostPro/MicBoostPro.exe   (folder mode, recommended)
-    — OR —
-    dist/MicBoostPro.exe               (single-file mode, slower cold start)
+    dist/MicBoostPro/MicBoostPro.exe   (folder mode — recommended, fast startup)
 
-Place app-icon.png in the same folder as this script before building.
+Folder structure expected:
+    ├── assets/
+    │   ├── app-icon.ico
+    │   └── app-icon.png
+    ├── build_exe.py
+    └── mic_booster_pro.py
 """
 
 import subprocess
@@ -20,16 +24,17 @@ import sys
 import os
 
 # ── Config ────────────────────────────────────────────────────────────────────
-APP_NAME   = "MicBoostPro"
-SCRIPT     = "mic_booster_pro.py"
-ICON_FILE  = "app-icon.png"     # used as window & tray icon
-ONE_FILE   = False              # True = single .exe (slower), False = folder (faster)
+APP_NAME  = "MicBoostPro"
+SCRIPT    = "mic_booster_pro.py"
+ONE_FILE  = False   # False = folder mode (recommended), True = single .exe
 
-# ── Build ─────────────────────────────────────────────────────────────────────
+# ── Main ──────────────────────────────────────────────────────────────────────
 def main():
-    here = os.path.dirname(os.path.abspath(__file__))
+    here        = os.path.dirname(os.path.abspath(__file__))
     script_path = os.path.join(here, SCRIPT)
-    icon_path   = os.path.join(here, ICON_FILE)
+    assets_dir  = os.path.join(here, "assets")
+    ico_path    = os.path.join(assets_dir, "app-icon.ico")
+    png_path    = os.path.join(assets_dir, "app-icon.png")
 
     if not os.path.exists(script_path):
         print(f"[ERROR] {SCRIPT} not found in {here}")
@@ -38,7 +43,7 @@ def main():
     cmd = [
         sys.executable, "-m", "PyInstaller",
         "--name", APP_NAME,
-        "--noconsole",                     # no black terminal window
+        "--noconsole",
         "--clean",
         "--noconfirm",
     ]
@@ -48,42 +53,50 @@ def main():
     else:
         cmd.append("--onedir")
 
-    # Bundle the icon so resource_path() finds it at runtime
-    if os.path.exists(icon_path):
-        # --add-data src;dest  (Windows uses semicolon)
-        cmd += ["--add-data", f"{icon_path};."]
-        # also set .ico for the exe itself (needs .ico format; PIL converts it)
-        ico_path = os.path.join(here, "app-icon.ico")
-        _make_ico(icon_path, ico_path)
+    # Bundle entire assets/ folder so resource_path("assets/...") works at runtime
+    if os.path.isdir(assets_dir):
+        # Syntax: src;dest_folder  (Windows semicolon)
+        cmd += ["--add-data", f"{assets_dir};assets"]
+        print(f"[INFO] Bundling assets/ folder")
+    else:
+        print(f"[WARN] assets/ folder not found — building without icons")
+
+    # Set exe icon (requires .ico)
+    if os.path.exists(ico_path):
+        cmd += ["--icon", ico_path]
+        print(f"[INFO] Using existing {ico_path}")
+    elif os.path.exists(png_path):
+        # Auto-convert PNG → ICO
+        _make_ico(png_path, ico_path)
         if os.path.exists(ico_path):
             cmd += ["--icon", ico_path]
     else:
-        print(f"[WARN] {ICON_FILE} not found — building without custom icon")
+        print("[WARN] No icon file found in assets/")
 
     cmd.append(script_path)
 
-    print("\n[BUILD] Running PyInstaller...\n")
-    print(" ".join(cmd), "\n")
+    print(f"\n[BUILD] Running PyInstaller...\n")
     result = subprocess.run(cmd, cwd=here)
 
     if result.returncode == 0:
         out = os.path.join(here, "dist", APP_NAME)
-        print(f"\n[OK] Build complete → {out}")
-        if not ONE_FILE:
-            print(f"     Run: {os.path.join(out, APP_NAME + '.exe')}")
+        exe = os.path.join(out, APP_NAME + ".exe")
+        print(f"\n[OK] Build complete!")
+        print(f"     EXE → {exe}")
     else:
-        print("\n[FAIL] PyInstaller returned non-zero exit code.")
+        print("\n[FAIL] PyInstaller exited with errors.")
         sys.exit(result.returncode)
 
 
 def _make_ico(png_path, ico_path):
-    """Convert PNG → ICO using Pillow (required by PyInstaller --icon)."""
+    """Convert PNG → multi-size ICO using Pillow."""
     try:
         from PIL import Image
-        img = Image.open(png_path).convert("RGBA")
+        img   = Image.open(png_path).convert("RGBA")
         sizes = [(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)]
         imgs  = [img.resize(s, Image.LANCZOS) for s in sizes]
-        imgs[0].save(ico_path, format="ICO", sizes=sizes, append_images=imgs[1:])
+        imgs[0].save(ico_path, format="ICO", sizes=sizes,
+                     append_images=imgs[1:])
         print(f"[OK] Created {ico_path}")
     except Exception as e:
         print(f"[WARN] Could not create .ico: {e}")
