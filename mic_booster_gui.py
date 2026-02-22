@@ -5,23 +5,21 @@ from threading import Thread
 
 gain_value = 1.0
 running = False
+monitoring = False
 audio_thread = None
+
 input_device = None
 output_device = None
+monitor_device = None
 
 # ========= DEVICE FILTER =========
 def get_clean_devices():
     devices = sd.query_devices()
-    inputs = []
-    outputs = []
-
-    seen_in = set()
-    seen_out = set()
+    inputs, outputs = [], []
+    seen_in, seen_out = set(), set()
 
     for d in devices:
         name = d['name']
-
-        # skip mapper / duplicate layer
         if "Mapper" in name or "Primary" in name:
             continue
 
@@ -37,13 +35,22 @@ def get_clean_devices():
 
 # ========= AUDIO =========
 def audio_callback(indata, outdata, frames, time, status):
-    global gain_value
+    global gain_value, monitoring
+
     if status:
         print(status)
 
-    boosted = indata * gain_value
-    boosted = np.clip(boosted, -1.0, 1.0)
+    boosted = np.clip(indata * gain_value, -1.0, 1.0)
+
+    # Output utama ke VB Cable
     outdata[:] = boosted
+
+    # Monitoring optional
+    if monitoring and monitor_device is not None:
+        try:
+            sd.play(boosted, device=monitor_device, samplerate=48000, blocking=False)
+        except:
+            pass
 
 def audio_loop():
     global running
@@ -64,8 +71,18 @@ def audio_loop():
 def update_gain(val):
     global gain_value
     slider_val = int(val)
-    gain_value = 1 + (slider_val / 100)
+
+    # Gain brutal mode 😈
+    gain_value = 1 + (slider_val / 50)
+
     gain_label.config(text=f"Gain: {slider_val}")
+
+def toggle_monitor():
+    global monitoring, monitor_device
+    monitoring = not monitoring
+    monitor_device = monitor_var.get()
+
+    monitor_btn.config(text=f"Monitoring: {'ON' if monitoring else 'OFF'}")
 
 def start_audio():
     global running, audio_thread, input_device, output_device
@@ -93,8 +110,8 @@ def exit_app():
 
 # ========= UI =========
 root = tk.Tk()
-root.title("Discord Mic Booster")
-root.geometry("420x320")
+root.title("Discord Mic Booster Pro")
+root.geometry("460x380")
 root.resizable(False, False)
 
 inputs, outputs = get_clean_devices()
@@ -104,16 +121,21 @@ tk.Label(root, text="Input Mic").pack()
 input_var = tk.StringVar(value=inputs[0] if inputs else "")
 tk.OptionMenu(root, input_var, *inputs).pack()
 
-# OUTPUT
+# OUTPUT VB CABLE
 tk.Label(root, text="Output (VB Cable)").pack()
 output_var = tk.StringVar(value=outputs[0] if outputs else "")
 tk.OptionMenu(root, output_var, *outputs).pack()
+
+# MONITOR DEVICE
+tk.Label(root, text="Monitoring Device").pack()
+monitor_var = tk.StringVar(value=outputs[0] if outputs else "")
+tk.OptionMenu(root, monitor_var, *outputs).pack()
 
 # GAIN
 gain_label = tk.Label(root, text="Gain: 0", font=("Segoe UI", 12))
 gain_label.pack(pady=10)
 
-slider = tk.Scale(root, from_=-100, to=100,
+slider = tk.Scale(root, from_=0, to=200,
                   orient="horizontal", command=update_gain)
 slider.set(0)
 slider.pack()
@@ -125,6 +147,10 @@ btn_frame.pack(pady=10)
 tk.Button(btn_frame, text="Start", width=10, command=start_audio).grid(row=0, column=0, padx=5)
 tk.Button(btn_frame, text="Stop", width=10, command=stop_audio).grid(row=0, column=1, padx=5)
 tk.Button(btn_frame, text="Exit", width=10, command=exit_app).grid(row=0, column=2, padx=5)
+
+# MONITOR BUTTON
+monitor_btn = tk.Button(root, text="Monitoring: OFF", command=toggle_monitor)
+monitor_btn.pack(pady=5)
 
 # STATUS
 status_label = tk.Label(root, text="Idle")
