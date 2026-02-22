@@ -5,7 +5,7 @@ a = Analysis(
     ['D:\\Personal App\\Audio Gain\\mic_booster_pro.py'],
     pathex=[],
     binaries=[],
-    datas=[('D:\\Personal App\\Audio Gain\\app-icon.png', '.')],
+    datas=[('D:\\Personal App\\Audio Gain\\assets', 'assets')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -31,7 +31,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['D:\\Personal App\\Audio Gain\\app-icon.ico'],
+    icon=['D:\\Personal App\\Audio Gain\\assets\\app-icon.ico'],
 )
 coll = COLLECT(
     exe,
