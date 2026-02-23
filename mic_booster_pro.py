@@ -22,7 +22,8 @@ input_device    = None
 output_device   = None
 monitor_device  = None
 monitor_queue   = queue.Queue(maxsize=20)
-viz_queue       = queue.Queue(maxsize=10)   # ← NEW: audio chunks for visualizer
+viz_queue       = queue.Queue(maxsize=10)
+rage_mode       = False          # ← NEW: RAGE MODE flag
 
 tray_icon  = None
 app_hidden = False
@@ -38,6 +39,9 @@ FG         = "#e8e8f0"
 FG_DIM     = "#6b6b80"
 RED        = "#ff4466"
 GREEN      = "#00ff88"
+RAGE_RED   = "#ff1a1a"
+RAGE_DIM   = "#cc0000"
+RAGE_BG    = "#1a0000"
 
 FONT_MONO  = ("Consolas", 9)
 FONT_LABEL = ("Segoe UI", 9)
@@ -118,7 +122,6 @@ def resolve_output_index(name):
     return _device_index_map.get(name, {}).get("out", name)
 
 def find_vbcable(outputs):
-    """Priority: VB-Cable 16ch → any CABLE device → any Virtual Audio Cable → None."""
     priorities = [
         "cable in 16ch",
         "cable in",
@@ -133,19 +136,11 @@ def find_vbcable(outputs):
     return None
 
 def find_best_output(outputs, saved_out=""):
-    """
-    Pick the best output device:
-    1. Saved setting (if still available)
-    2. VB-Cable (any variant)
-    3. First real non-virtual output (avoid re-feeding mic)
-    4. First output in list
-    """
     if saved_out and saved_out in outputs:
         return saved_out
     vb = find_vbcable(outputs)
     if vb:
         return vb
-    # Prefer a real speaker/headphone over virtual devices
     for name in outputs:
         nl = name.lower()
         if any(k in nl for k in ["speaker", "headphone", "headset", "realtek", "audio output"]):
@@ -164,26 +159,18 @@ def audio_callback(indata, outdata, frames, time, status):
             monitor_queue.put_nowait(boosted.copy())
         except queue.Full:
             pass
-    # Feed visualizer (always, even when not monitoring)
     try:
         viz_queue.put_nowait(boosted.copy())
     except queue.Full:
         pass
 
 def _find_compatible_output(in_idx):
-    """
-    Try outputs in priority order to avoid 'Illegal Combination of IO devices'.
-    Priority: VB-Cable → saved output → system default (None).
-    We test each by querying their host API; if input & output share the same
-    host API they are compatible with PortAudio.
-    """
     try:
         in_info  = sd.query_devices(in_idx)
         in_api   = in_info["hostapi"]
     except Exception:
-        return None   # fall back to system default
+        return None
 
-    # Build candidates: preferred output first, then all others, then default
     preferred = resolve_output_index(output_device)
     candidates = []
     if preferred is not None and preferred != in_idx:
@@ -201,7 +188,7 @@ def _find_compatible_output(in_idx):
         except Exception:
             continue
 
-    return None  # let PortAudio pick default
+    return None
 
 def audio_loop():
     global running
@@ -276,15 +263,11 @@ def stop_monitor():
     monitoring = False
 
 def show_error(msg):
-    """Show error at the very bottom of the window (below tray hint label)."""
-    # Truncate long PortAudio messages to keep them readable
     short = msg.replace("\n", " ").strip()
     if len(short) > 72:
         short = short[:69] + "…"
     error_label.config(text=f"⚠  {short}", fg=RED)
-    # Auto-clear after 8 seconds
     root.after(8000, lambda: error_label.config(text=""))
-    # Also reset status indicator
     status_dot.config(fg=FG_DIM, text="●")
     status_label.config(text="IDLE", fg=FG_DIM)
     start_btn.config(fg=ACCENT)
@@ -293,31 +276,38 @@ def show_error(msg):
 # ─── Visualizer ───────────────────────────────────────────────────────────────
 VIZ_W        = 420
 VIZ_H        = 90
-N_BARS       = 40          # number of frequency bars
-FFT_SIZE     = 1024        # FFT window size (accumulate samples)
+N_BARS       = 40
+FFT_SIZE     = 1024
 _fft_buf     = np.zeros(FFT_SIZE, dtype="float32")
-_bar_smooth  = np.zeros(N_BARS, dtype="float32")  # smoothed bar heights
-_peak_hold   = np.zeros(N_BARS, dtype="float32")  # peak dots
-_peak_timer  = np.zeros(N_BARS, dtype="float32")  # frames until peak drops
-SMOOTH_ATK   = 0.85   # attack smoothing (rise fast)
-SMOOTH_REL   = 0.55   # release smoothing (fall slower)
+_bar_smooth  = np.zeros(N_BARS, dtype="float32")
+_peak_hold   = np.zeros(N_BARS, dtype="float32")
+_peak_timer  = np.zeros(N_BARS, dtype="float32")
+SMOOTH_ATK   = 0.85
+SMOOTH_REL   = 0.55
 PEAK_HOLD_FRAMES = 18
 PEAK_FALL        = 0.04
 
-# Color stops for gradient bars: (height_fraction, r, g, b)
 _GRAD = [
-    (0.00,  0,  80, 100),   # deep teal at bottom
-    (0.45,  0, 229, 255),   # cyan mid
-    (0.75, 100, 255, 220),  # bright cyan-green
-    (1.00, 255,  80,  80),  # red at clip top
+    (0.00,  0,  80, 100),
+    (0.45,  0, 229, 255),
+    (0.75, 100, 255, 220),
+    (1.00, 255,  80,  80),
 ]
 
-def _lerp_color(frac):
-    """Interpolate gradient color for a bar height fraction 0..1."""
+_GRAD_RAGE = [
+    (0.00, 100,   0,   0),
+    (0.45, 255,  50,   0),
+    (0.75, 255, 150,   0),
+    (1.00, 255, 255,   0),
+]
+
+def _lerp_color(frac, grad=None):
+    if grad is None:
+        grad = _GRAD_RAGE if rage_mode else _GRAD
     frac = max(0.0, min(1.0, frac))
-    for i in range(len(_GRAD) - 1):
-        f0, r0, g0, b0 = _GRAD[i]
-        f1, r1, g1, b1 = _GRAD[i + 1]
+    for i in range(len(grad) - 1):
+        f0, r0, g0, b0 = grad[i]
+        f1, r1, g1, b1 = grad[i + 1]
         if frac <= f1:
             t = (frac - f0) / (f1 - f0 + 1e-9)
             r = int(r0 + t * (r1 - r0))
@@ -326,11 +316,11 @@ def _lerp_color(frac):
             return f"#{r:02x}{g:02x}{b:02x}"
     return "#ff5050"
 
-def _draw_visualizer():
-    """Called by Tk event loop via root.after(). Drains viz_queue, computes FFT, draws bars."""
-    global _fft_buf, _bar_smooth, _peak_hold, _peak_timer
+_rage_blink_state = False
 
-    # Drain all pending chunks into FFT buffer
+def _draw_visualizer():
+    global _fft_buf, _bar_smooth, _peak_hold, _peak_timer, _rage_blink_state
+
     new_samples = []
     while True:
         try:
@@ -341,18 +331,15 @@ def _draw_visualizer():
 
     if new_samples:
         combined = np.concatenate(new_samples)
-        # Shift buffer and fill with new data
         if len(combined) >= FFT_SIZE:
             _fft_buf = combined[-FFT_SIZE:]
         else:
             _fft_buf = np.roll(_fft_buf, -len(combined))
             _fft_buf[-len(combined):] = combined
 
-    # Compute FFT magnitude (only positive freqs)
     windowed  = _fft_buf * np.hanning(FFT_SIZE)
     spectrum  = np.abs(np.fft.rfft(windowed))
-    spectrum  = spectrum[:FFT_SIZE // 2]      # first half
-    # Log-scale frequency bin mapping
+    spectrum  = spectrum[:FFT_SIZE // 2]
     log_bins  = np.logspace(np.log10(2), np.log10(len(spectrum) - 1), N_BARS + 1).astype(int)
     log_bins  = np.clip(log_bins, 0, len(spectrum) - 1)
     bar_raw   = np.array([
@@ -360,30 +347,34 @@ def _draw_visualizer():
         for i in range(N_BARS)
     ], dtype="float32")
 
-    # Normalize to 0..1
     ref = max(bar_raw.max(), 0.01)
     bar_norm = np.clip(bar_raw / ref * 0.9, 0.0, 1.0)
 
-    # Volume-scale: RMS of buffer drives overall height
     rms = float(np.sqrt(np.mean(_fft_buf ** 2))) * 8.0
     rms = min(rms, 1.0)
     bar_norm *= rms
 
-    # Smoothing
     rising  = bar_norm > _bar_smooth
     _bar_smooth = np.where(rising,
                            _bar_smooth * (1 - SMOOTH_ATK) + bar_norm * SMOOTH_ATK,
                            _bar_smooth * (1 - SMOOTH_REL) + bar_norm * SMOOTH_REL)
 
-    # Peak hold
     new_peak = _bar_smooth > _peak_hold
     _peak_hold  = np.where(new_peak, _bar_smooth, _peak_hold)
     _peak_timer = np.where(new_peak, PEAK_HOLD_FRAMES, _peak_timer - 1)
     falling = _peak_timer <= 0
     _peak_hold  = np.where(falling, np.maximum(_peak_hold - PEAK_FALL, _bar_smooth), _peak_hold)
 
-    # ── Draw ────────────────────────────────────────────────────────────────
     canvas = viz_canvas
+
+    # Rage mode: blink canvas background
+    if rage_mode:
+        _rage_blink_state = not _rage_blink_state
+        canvas_bg = "#1a0000" if _rage_blink_state else "#0d0000"
+        canvas.config(bg=canvas_bg)
+    else:
+        canvas.config(bg=SURFACE2)
+
     canvas.delete("viz")
 
     bar_area_h = VIZ_H - 6
@@ -396,22 +387,18 @@ def _draw_visualizer():
         frac = _bar_smooth[i]
         col  = _lerp_color(frac)
 
-        # Main bar (bottom-up)
         x0 = x
         y0 = VIZ_H - h
         x1 = x + bar_w - 1
         y1 = VIZ_H
 
-        # Draw bar with slight inner glow effect (two rects)
         canvas.create_rectangle(x0, y0, x1, y1,
                                  fill=col, outline="", tags="viz")
-        # Subtle inner highlight on top portion of bar
         if h > 4:
             inner_col = _lerp_color(min(frac + 0.15, 1.0))
             canvas.create_rectangle(x0 + 1, y0, x1 - 1, y0 + 2,
                                      fill=inner_col, outline="", tags="viz")
 
-        # Peak dot
         ph = max(2, int(_peak_hold[i] * bar_area_h))
         py = VIZ_H - ph - 2
         if py > 0:
@@ -421,21 +408,60 @@ def _draw_visualizer():
 
         x += bar_w + gap
 
-    # Mirror reflection (subtle, at very bottom)
     canvas.create_rectangle(0, VIZ_H - 3, VIZ_W, VIZ_H,
-                             fill=BG, outline="", tags="viz")
+                             fill=canvas.cget("bg"), outline="", tags="viz")
 
-    root.after(33, _draw_visualizer)   # ~30 fps
+    root.after(33, _draw_visualizer)
+
+
+# ─── Gain calculation ─────────────────────────────────────────────────────────
+# NEW RANGE:
+#   Slider  0   → gain 0.0  (mute / volume 0)
+#   Slider  100 → gain 1.0  (unity / normal volume)
+#   Slider  250 → gain 6.0  (max boost, ~+15.6 dB)
+#
+# Formula: gain = (slider_value / 100) ** 1.5  — but we want 0→0, 100→1, 250→6
+# Simpler piecewise:
+#   0..100  : gain = slider / 100           (linear 0→1)
+#   100..250: gain = 1 + ((slider-100)/150) * 5  (linear 1→6)
+
+def slider_to_gain(v):
+    """Convert slider value (0-250) to gain multiplier."""
+    v = float(v)
+    if v <= 0:
+        return 0.0
+    elif v <= 100:
+        return v / 100.0
+    else:
+        # 100→1.0 .. 250→6.0
+        return 1.0 + ((v - 100.0) / 150.0) * 5.0
 
 
 # ─── Logic ────────────────────────────────────────────────────────────────────
 def update_gain(val):
     global gain_value
-    v = int(float(val))
-    gain_value = 1 + (v / 50)
-    db = round(20 * math.log10(gain_value), 1) if gain_value > 0 else 0
-    gain_val_label.config(text=f"{v:03d}")
-    db_label.config(text=f"+{db} dB")
+    v = float(val)
+    gain_value = slider_to_gain(v)
+
+    v_int = int(v)
+    gain_val_label.config(text=f"{v_int:03d}")
+
+    if gain_value <= 0:
+        db_str = "-∞ dB"
+        gain_val_label.config(fg=FG_DIM)
+    elif gain_value < 1.0:
+        db = round(20 * math.log10(gain_value), 1)
+        db_str = f"{db} dB"
+        gain_val_label.config(fg=FG_DIM)
+    elif gain_value == 1.0:
+        db_str = "±0.0 dB"
+        gain_val_label.config(fg=GREEN)
+    else:
+        db = round(20 * math.log10(gain_value), 1)
+        db_str = f"+{db} dB"
+        gain_val_label.config(fg=ACCENT)
+
+    db_label.config(text=db_str)
 
 def toggle_monitor():
     global monitor_device
@@ -484,6 +510,121 @@ def exit_app(icon=None, item=None):
     if tray_icon:
         tray_icon.stop()
     root.destroy()
+
+# ─── RAGE MODE ────────────────────────────────────────────────────────────────
+RAGE_GAIN = 800.0   # absurd gain for prank
+
+_rage_blink_job = None
+
+def _rage_blink_ui():
+    """Blink the rage button itself while rage mode is active."""
+    global _rage_blink_job
+    if not rage_mode:
+        return
+    cur = rage_btn.cget("bg")
+    next_bg = RAGE_RED if cur == RAGE_BG else RAGE_BG
+    rage_btn.config(bg=next_bg)
+    _rage_blink_job = root.after(400, _rage_blink_ui)
+
+def toggle_rage():
+    global rage_mode, gain_value, _rage_blink_job
+    rage_mode = not rage_mode
+
+    if rage_mode:
+        # Store current gain and switch to RAGE gain
+        gain_value = RAGE_GAIN
+        # Update UI
+        rage_btn.config(
+            text="💀 RAGE MODE  ●  ON",
+            fg="#ffff00",
+            bg=RAGE_RED,
+            highlightbackground=RAGE_RED,
+        )
+        gain_val_label.config(text="☠☠☠", fg=RAGE_RED)
+        db_label.config(text="+∞ RAGE", fg=RAGE_RED)
+        slider.state(["disabled"])   # lock slider during rage
+        _rage_blink_ui()
+        root.configure(bg=RAGE_BG)
+        for w in [header, section, gain_sec, viz_outer, ctrl, autorun_frame]:
+            try:
+                w.config(bg=RAGE_BG)
+            except Exception:
+                pass
+        for lbl in [status_dot, status_label, db_label, gain_val_label]:
+            try:
+                lbl.config(bg=RAGE_BG)
+            except Exception:
+                pass
+        for child in gain_hdr.winfo_children():
+            try:
+                child.config(bg=RAGE_BG)
+            except Exception:
+                pass
+        for child in header.winfo_children():
+            try:
+                child.config(bg=RAGE_BG)
+            except Exception:
+                pass
+        for child in badge.winfo_children():
+            try:
+                child.config(bg=RAGE_BG)
+            except Exception:
+                pass
+        for child in autorun_frame.winfo_children():
+            try:
+                child.config(bg=RAGE_BG)
+            except Exception:
+                pass
+    else:
+        # Cancel blink job
+        if _rage_blink_job:
+            root.after_cancel(_rage_blink_job)
+            _rage_blink_job = None
+        # Restore slider-based gain
+        v = slider.get()
+        gain_value = slider_to_gain(v)
+        update_gain(v)
+        slider.state(["!disabled"])
+        # Restore button style
+        rage_btn.config(
+            text="☠  RAGE MODE  ○  OFF",
+            fg=FG_DIM,
+            bg=SURFACE,
+            highlightbackground=BORDER,
+        )
+        # Restore background
+        root.configure(bg=BG)
+        for w in [header, section, gain_sec, viz_outer, ctrl, autorun_frame]:
+            try:
+                w.config(bg=BG)
+            except Exception:
+                pass
+        for lbl in [status_dot, status_label]:
+            try:
+                lbl.config(bg=BG)
+            except Exception:
+                pass
+        for child in gain_hdr.winfo_children():
+            try:
+                child.config(bg=BG)
+            except Exception:
+                pass
+        for child in header.winfo_children():
+            try:
+                child.config(bg=BG)
+            except Exception:
+                pass
+        for child in badge.winfo_children():
+            try:
+                child.config(bg=BG)
+            except Exception:
+                pass
+        for child in autorun_frame.winfo_children():
+            try:
+                child.config(bg=BG)
+            except Exception:
+                pass
+
 
 # ─── Autorun ─────────────────────────────────────────────────────────────────
 def set_autorun(enable=True):
@@ -579,7 +720,7 @@ def on_close():
 # ─── UI ───────────────────────────────────────────────────────────────────────
 root = tk.Tk()
 root.title("MIC FCKIN BOOST")
-root.geometry("460x400")   # initial — will be auto-resized after widgets pack
+root.geometry("460x400")
 root.resizable(False, False)
 root.configure(bg=BG)
 root.protocol("WM_DELETE_WINDOW", on_close)
@@ -629,8 +770,9 @@ def styled_dropdown(parent, var, options):
 # ── Header ───────────────────────────────────────────────────────────────────
 header = tk.Frame(root, bg=BG)
 header.pack(fill="x", padx=20, pady=(20, 4))
-mk_label(header, "MIC",   fg=ACCENT, font=("Consolas", 18, "bold")).pack(side="left")
-mk_label(header, "BOOST", fg=FG,     font=("Consolas", 18, "bold")).pack(side="left", padx=(2, 0))
+mk_label(header, "MIC",   fg=FG, font=("Consolas", 18, "bold")).pack(side="left")
+mk_label(header, "FCKIN",   fg=FG, font=("Consolas", 18, "bold")).pack(side="left")
+mk_label(header, "BOOST", fg=ACCENT,     font=("Consolas", 18, "bold")).pack(side="left", padx=(2, 0))
 
 badge = tk.Frame(header, bg=BG)
 badge.pack(side="right", pady=4)
@@ -652,7 +794,7 @@ in_frame  = styled_dropdown(section, input_var, inputs or ["No input found"])
 
 tk.Frame(section, bg=BG, height=6).pack()
 
-mk_label(section, "OUTPUT  /  VB‑CABLE", fg=FG_DIM, font=FONT_MONO).pack(anchor="w", padx=20)
+mk_label(section, "OUTPUT (VB‑CABLE Recommended)", fg=FG_DIM, font=FONT_MONO).pack(anchor="w", padx=20)
 output_var = tk.StringVar()
 out_frame  = styled_dropdown(section, output_var, outputs or ["No output found"])
 
@@ -672,10 +814,15 @@ gain_sec.pack(fill="x", padx=20)
 gain_hdr = tk.Frame(gain_sec, bg=BG)
 gain_hdr.pack(fill="x")
 mk_label(gain_hdr, "GAIN", fg=FG_DIM, font=FONT_MONO).pack(side="left")
-db_label = tk.Label(gain_hdr, text="+0.0 dB", fg=FG_DIM, bg=BG, font=FONT_MONO)
+
+# NEW: range labels
+mk_label(gain_hdr, "0=MUTE  ·  100=UNITY  ·  250=MAX BOOST",
+         fg="#3a3a48", font=("Consolas", 7)).pack(side="left", padx=8)
+
+db_label = tk.Label(gain_hdr, text="±0.0 dB", fg=FG_DIM, bg=BG, font=FONT_MONO)
 db_label.pack(side="right")
 
-gain_val_label = tk.Label(gain_sec, text="000", fg=ACCENT, bg=BG, font=FONT_BIG)
+gain_val_label = tk.Label(gain_sec, text="100", fg=GREEN, bg=BG, font=FONT_BIG)
 gain_val_label.pack(pady=(2, 6))
 
 _sty = ttk.Style()
@@ -684,15 +831,23 @@ _sty.configure("Gain.Horizontal.TScale",
                background=BG, troughcolor=SURFACE2,
                sliderthickness=18, sliderrelief="flat")
 
-slider = ttk.Scale(gain_sec, from_=0, to=200, orient="horizontal",
+# NEW: slider range 0-250
+slider = ttk.Scale(gain_sec, from_=0, to=250, orient="horizontal",
                    command=update_gain, style="Gain.Horizontal.TScale")
-slider.set(0)
+slider.set(100)   # default = unity gain
 slider.pack(fill="x")
 
 tick_row = tk.Frame(gain_sec, bg=BG)
 tick_row.pack(fill="x")
-for t in ["0", "50", "100", "150", "200"]:
+for t in ["0", "50", "100", "150", "200", "250"]:
     mk_label(tick_row, t, fg=FG_DIM, font=("Consolas", 7)).pack(side="left", expand=True)
+
+# NEW: tick marker labels
+hint_row = tk.Frame(gain_sec, bg=BG)
+hint_row.pack(fill="x")
+mk_label(hint_row, "MUTE", fg="#3a3a48", font=("Consolas", 7)).pack(side="left")
+mk_label(hint_row, "UNITY", fg="#3a3a48", font=("Consolas", 7)).pack(side="left", padx=(80, 0))
+mk_label(hint_row, "MAX", fg="#3a3a48", font=("Consolas", 7)).pack(side="right")
 
 mk_divider(root, (12, 6))
 
@@ -705,7 +860,6 @@ viz_header.pack(fill="x", pady=(0, 4))
 mk_label(viz_header, "SPECTRUM", fg=FG_DIM, font=FONT_MONO).pack(side="left")
 mk_label(viz_header, "FFT · 40‑BAND", fg="#3a3a48", font=("Consolas", 7)).pack(side="right", pady=1)
 
-# Canvas with subtle border
 viz_border = tk.Frame(viz_outer, bg=BORDER, padx=1, pady=1)
 viz_border.pack(fill="x")
 
@@ -716,7 +870,6 @@ viz_canvas = tk.Canvas(
 )
 viz_canvas.pack(fill="x")
 
-# Draw idle grid lines on canvas (horizontal reference lines)
 _grid_ys = [VIZ_H // 4, VIZ_H // 2, 3 * VIZ_H // 4]
 for gy in _grid_ys:
     viz_canvas.create_line(0, gy, VIZ_W, gy,
@@ -746,6 +899,28 @@ monitor_btn = tk.Button(root, text="○ MON OFF", command=toggle_monitor,
                         highlightbackground=BORDER, highlightthickness=1,
                         font=FONT_MONO, padx=14, pady=8, cursor="hand2")
 monitor_btn.pack(fill="x", padx=24, pady=(2, 4))
+
+# ── RAGE MODE button ──────────────────────────────────────────────────────────
+mk_divider(root, (4, 4))
+
+rage_btn = tk.Button(
+    root,
+    text="☠  RAGE MODE  ○  OFF",
+    command=toggle_rage,
+    fg=FG_DIM,
+    bg=SURFACE,
+    activeforeground=RAGE_RED,
+    activebackground=RAGE_BG,
+    relief="flat",
+    bd=0,
+    highlightbackground="#550000",
+    highlightthickness=1,
+    font=("Consolas", 10, "bold"),
+    padx=14,
+    pady=10,
+    cursor="hand2",
+)
+rage_btn.pack(fill="x", padx=24, pady=(0, 6))
 
 # ── Autorun ──────────────────────────────────────────────────────────────────
 autorun_frame = tk.Frame(root, bg=BG)
@@ -783,7 +958,7 @@ tk.Button(root,
 mk_label(root, "✕ close = minimize to tray", fg="#3a3a48",
          font=("Consolas", 7)).pack(pady=(0, 2))
 
-# ── Error label (hidden until an error occurs) ───────────────────────────────
+# ── Error label ───────────────────────────────────────────────────────────────
 error_label = tk.Label(root, text="", fg=RED, bg=BG,
                        font=("Consolas", 8), wraplength=420, justify="left")
 error_label.pack(fill="x", padx=20, pady=(0, 8))
@@ -804,7 +979,7 @@ def apply_initial_settings():
     else:
         mon_frame._set_by_full("System Default")
     try:
-        g = cfg.get("gain", 0)
+        g = cfg.get("gain", 100)   # default now 100 = unity
         slider.set(float(g))
         update_gain(g)
     except Exception:
@@ -816,12 +991,11 @@ root.after(50, apply_initial_settings)
 build_tray()
 
 def _fit_window():
-    """Auto-size window height to exactly fit all packed widgets + 16px bottom pad."""
     root.update_idletasks()
     h = root.winfo_reqheight() + 16
     root.geometry(f"460x{h}")
 
 root.after(80, _fit_window)
 root.after(100, _draw_visualizer)
-root.after(200, start_audio)   # ← auto-start on launch
+root.after(200, start_audio)
 root.mainloop()
