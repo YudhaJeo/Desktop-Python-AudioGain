@@ -489,7 +489,7 @@ def exit_app(icon=None, item=None):
 def set_autorun(enable=True):
     try:
         import winreg
-        app_name = "MicBoostPro"
+        app_name = "MicFckinBoost"
         exe_path = (f'"{sys.executable}"' if getattr(sys, "frozen", False)
                     else f'"{sys.executable}" "{os.path.abspath(__file__)}"')
         key = winreg.OpenKey(
@@ -516,7 +516,7 @@ def is_autorun_enabled():
             r"Software\Microsoft\Windows\CurrentVersion\Run",
             0, winreg.KEY_READ,
         )
-        winreg.QueryValueEx(key, "MicBoostPro")
+        winreg.QueryValueEx(key, "MicFckinBoost")
         winreg.CloseKey(key)
         return True
     except Exception:
@@ -550,7 +550,7 @@ def hide_window():
 
 def update_tray_tooltip():
     if tray_icon:
-        tray_icon.title = f"MicBoost — {'LIVE' if running else 'IDLE'}"
+        tray_icon.title = f"MicFckinBoost — {'LIVE' if running else 'IDLE'}"
 
 def build_tray():
     global tray_icon
@@ -568,8 +568,8 @@ def build_tray():
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Exit", exit_app),
     )
-    tray_icon = pystray.Icon("MicBoostPro", load_tray_image(),
-                             "MicBoost — IDLE", menu)
+    tray_icon = pystray.Icon("MicFckinBoost", load_tray_image(),
+                             "MicFckinBoost — IDLE", menu)
     Thread(target=tray_icon.run, daemon=True).start()
 
 def on_close():
@@ -578,7 +578,7 @@ def on_close():
 
 # ─── UI ───────────────────────────────────────────────────────────────────────
 root = tk.Tk()
-root.title("MIC BOOST")
+root.title("MIC FCKIN BOOST")
 root.geometry("460x400")   # initial — will be auto-resized after widgets pack
 root.resizable(False, False)
 root.configure(bg=BG)

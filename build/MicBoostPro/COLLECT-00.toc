@@ -1,5 +1,5 @@
-([('MicBoostPro.exe',
-   'D:\\Personal App\\Audio Gain\\build\\MicBoostPro\\MicBoostPro.exe',
+([('MicFckinBoost.exe',
+   'D:\\Personal App\\Audio Gain\\build\\MicFckinBoost\\MicFckinBoost.exe',
    'EXECUTABLE'),
   ('python312.dll',
    'C:\\Users\\bayud\\AppData\\Local\\Programs\\Python\\Python312\\python312.dll',
@@ -355,7 +355,7 @@
    'D:\\Personal App\\Audio Gain\\assets\\app-icon.png',
    'DATA'),
   ('base_library.zip',
-   'D:\\Personal App\\Audio Gain\\build\\MicBoostPro\\base_library.zip',
+   'D:\\Personal App\\Audio Gain\\build\\MicFckinBoost\\base_library.zip',
    'DATA'),
   ('jaraco\\text\\Lorem ipsum.txt',
    'C:\\Users\\bayud\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\setuptools\\_vendor\\jaraco\\text\\Lorem '

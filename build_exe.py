@@ -1,6 +1,6 @@
 # build_exe.py
 """
-build_exe.py — Generate MicBoostPro.exe
+build_exe.py — Generate MicFckinBoost.exe
 ========================================
 Requirements:
     pip install pyinstaller sounddevice numpy pystray pillow
@@ -9,7 +9,7 @@ Usage:
     python build_exe.py
 
 Output:
-    dist/MicBoostPro/MicBoostPro.exe   (folder mode — recommended, fast startup)
+    dist/MicFckinBoost/MicFckinBoost.exe   (folder mode — recommended, fast startup)
 
 Folder structure expected:
     ├── assets/
@@ -24,7 +24,7 @@ import sys
 import os
 
 # ── Config ────────────────────────────────────────────────────────────────────
-APP_NAME  = "MicBoostPro"
+APP_NAME  = "MicFckinBoost"
 SCRIPT    = "mic_booster_pro.py"
 ONE_FILE  = False   # False = folder mode (recommended), True = single .exe
 
