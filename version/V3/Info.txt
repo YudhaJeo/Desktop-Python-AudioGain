@@ -1,0 +1,1 @@
+Penambahan file setup dengan installasi permanen di Windows Installed Apps. Direktori instalasi bisa dipilih melalui proses setup di intalasi. Di build menggunakan Inno Setup Compiler V6.
