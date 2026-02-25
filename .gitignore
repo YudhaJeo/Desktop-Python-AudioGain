@@ -1,3 +1,4 @@
 # Audio Gain\.gitignore
 
 build/
+dist/
