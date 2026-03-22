@@ -18,9 +18,9 @@ Aplikasi desktop simpel buat **boost volume microphone** di laptop/PC. Cocok kal
 
 Klik versi di bawah buat langsung download:
 
-* [Download v1](https://github.com/YudhaJeo/Desktop-Python-AudioGain/blob/main/version/V1/MicFckinBoost.exe)
-* [Download v2](https://github.com/YudhaJeo/Desktop-Python-AudioGain/blob/main/version/V2/MicFckinBoost.exe)
-* [Download v3](https://github.com/YudhaJeo/Desktop-Python-AudioGain/blob/main/version/V3/MicFckinBoost_Setup.exe)
+* [Download v1](https://github.com/YudhaJeo/Desktop-Python-AudioGain/raw/main/version/V1/MicFckinBoost.exe?download=1)
+* [Download v2](https://github.com/YudhaJeo/Desktop-Python-AudioGain/raw/main/version/V2/MicFckinBoost.exe?download=1)
+* [Download v3](https://github.com/YudhaJeo/Desktop-Python-AudioGain/raw/main/version/V3/MicFckinBoost_Setup.exe?download=1)
 
 ---
 
