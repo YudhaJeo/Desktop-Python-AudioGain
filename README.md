@@ -1,4 +1,6 @@
-# Desktop Python Microphone Gain (Mic Fckin Boost)
+# Desktop Python Microphone Gain
+
+# (Mic Fckin Boost)
 
 Aplikasi desktop simpel buat **boost volume microphone** di laptop/PC. Cocok kalau mic laptop lu suaranya kecil kaya orang sekarat.
 
@@ -7,30 +9,27 @@ Aplikasi desktop simpel buat **boost volume microphone** di laptop/PC. Cocok kal
 ## Features
 
 * Boost volume mic di atas limit default Windows
-* UI simpel, no ribet
-* Beberapa versi pengembangan (v1, v2, v3)
-* Boost gain 800+ buat prank(jangan sering sering dipake)
+* Boost gain 800+ buat prank (jangan sering dipake)
 * Self monitor
 
 ---
 
 ## Download
 
-Pilih versi:
+Klik versi di bawah buat langsung download:
 
-* `v1` → basic
-* `v2` → lebih stabil
-* `v3` → stabil banget inimah
+* [Download v1](https://github.com/YudhaJeo/Desktop-Python-AudioGain/raw/main/version/v1/MicFckinBoost.exe)
+* [Download v2](https://github.com/YudhaJeo/Desktop-Python-AudioGain/raw/main/version/v2/MicFckinBoost.exe)
+* [Download v3](https://github.com/YudhaJeo/Desktop-Python-AudioGain/raw/main/version/v3/MicFckinBoost_Setup.exe)
 
 ---
 
 ## Cara Pakai
 
-1. Download salah satu versi di folder `/version`
-2. Extract kalau zip
-3. Jalankan `.exe`
-4. Pilih mic yang mau dipakai
-5. Atur gain sesuai kebutuhan
+1. Download salah satu versi
+2. Jalankan `.exe`
+3. Pilih mic yang mau dipakai
+4. Atur gain sesuai kebutuhan
 
 ---
 
@@ -38,16 +37,16 @@ Pilih versi:
 
 App ini nambah **gain pada input microphone** di level software.
 
-Jadi:
+Intinya:
 
 * Suara mic diperkuat sebelum masuk ke aplikasi lain
 * Hasilnya mic jadi lebih kenceng di Discord, game, dll
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
-```id="n8x2pz"
+```
 Desktop-Python-AudioGain/
 │
 ├── version/
@@ -59,6 +58,8 @@ Desktop-Python-AudioGain/
 └── README.md
 ```
 
-## ✨ Author
+---
+
+## Author
 
 Guah
