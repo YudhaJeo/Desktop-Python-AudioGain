@@ -11,6 +11,8 @@ Aplikasi desktop simpel buat **boost volume microphone** di laptop/PC. Cocok kal
 * Boost volume mic di atas limit default Windows
 * Boost gain 800+ buat prank (jangan sering dipake)
 * Self monitor
+* Auto-run setiap kali laptop nyala
+* Aplikasi bisa di close karena berjalan di background task
 
 ---
 
@@ -30,6 +32,8 @@ Klik versi di bawah buat langsung download:
 2. Jalankan `.exe`
 3. Pilih mic yang mau dipakai
 4. Atur gain sesuai kebutuhan
+5. Klik exit apabila ingin end-task aplikasi
+6. Apabila ingin digunakan untuk mikrofon komunikasi, install virtual cable
 
 ---
 
