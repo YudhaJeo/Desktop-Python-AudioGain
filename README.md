@@ -20,7 +20,7 @@ Klik versi di bawah buat langsung download:
 
 * [Download v1](https://github.com/YudhaJeo/Desktop-Python-AudioGain/raw/main/version/V1/MicFckinBoost.exe?download=1)
 * [Download v2](https://github.com/YudhaJeo/Desktop-Python-AudioGain/raw/main/version/V2/MicFckinBoost.exe?download=1)
-* [Download v3](https://github.com/YudhaJeo/Desktop-Python-AudioGain/raw/main/version/V3/MicFckinBoost_Setup.exe?download=1)
+* [Download v3(recomended)](https://github.com/YudhaJeo/Desktop-Python-AudioGain/raw/main/version/V3/MicFckinBoost_Setup.exe?download=1)
 
 ---
 
